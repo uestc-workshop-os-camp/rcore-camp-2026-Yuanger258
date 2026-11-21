@@ -13,8 +13,9 @@ mod context;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
-
+use crate::syscall::{SYSCALL_EXIT, SYSCALL_GET_TIME, SYSCALL_TRACE, SYSCALL_WRITE, SYSCALL_YIELD};
 use crate::config::MAX_APP_NUM;
+use self::task::SysCallNum;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
@@ -54,6 +55,13 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscall_num:SysCallNum{
+                syscall_write: 0,
+                syscall_yield: 0,
+                syscall_gettime: 0,
+                syscall_trace: 0,
+                syscall_exit: 0,
+            },
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -76,6 +84,70 @@ impl TaskManager {
     ///
     /// Generally, the first task in task list is an idle task (we call it zero process later).
     /// But in ch3, we load apps statically, so the first task is a real app.
+    
+    ///添加了记录系统调用的方法
+     pub  fn record_syscall_num(&self,syscall_id:usize) {
+        let mut inner =self.inner.exclusive_access();
+        let current = inner.current_task;
+        let task= &mut inner.tasks[current];
+        
+        match syscall_id {
+            SYSCALL_WRITE =>{
+                task.syscall_num.syscall_write = task.syscall_num.syscall_write + 1;
+
+            },
+            SYSCALL_EXIT =>{
+                task.syscall_num.syscall_exit = task.syscall_num.syscall_exit + 1;
+
+            },
+            SYSCALL_GET_TIME =>{
+                task.syscall_num.syscall_gettime = task.syscall_num.syscall_gettime + 1;
+
+            },SYSCALL_TRACE =>{
+                task.syscall_num.syscall_trace = task.syscall_num.syscall_trace + 1;
+
+            },
+            SYSCALL_YIELD =>{
+                task.syscall_num.syscall_yield = task.syscall_num.syscall_yield + 1;
+
+            },
+            _ => (),
+
+        }
+        
+    }   
+    ///查询当前任务的系统调用次数
+    pub fn get_syscall_num(&self,syscall_id:usize) ->isize{
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let  task =  &inner.tasks[current];
+        match syscall_id {
+            SYSCALL_WRITE =>{
+                return task.syscall_num.syscall_write as isize;
+
+            },
+            SYSCALL_EXIT =>{
+                return task.syscall_num.syscall_exit as isize;
+
+            },
+            SYSCALL_GET_TIME =>{
+                return task.syscall_num.syscall_gettime as isize;
+
+            },SYSCALL_TRACE =>{
+                return task.syscall_num.syscall_trace as isize;
+
+            },
+            SYSCALL_YIELD =>{
+                return task.syscall_num.syscall_yield as isize;
+
+            },
+            _ =>{
+                return 0;
+            }
+
+        }
+    }
+
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();
         let task0 = &mut inner.tasks[0];
@@ -95,6 +167,7 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
         inner.tasks[current].task_status = TaskStatus::Ready;
+        
     }
 
     /// Change the status of current `Running` task into `Exited`.
