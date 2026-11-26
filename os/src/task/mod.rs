@@ -8,12 +8,11 @@
 //!
 //! Be careful when you see `__switch` ASM function in `switch.S`. Control flow around this function
 //! might not be what you expect.
-
 mod context;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
-
+use crate::syscall::{SYSCALL_EXIT, SYSCALL_GET_TIME, SYSCALL_TRACE, SYSCALL_WRITE, SYSCALL_YIELD,SYSCALL_SBRK,SYSCALL_MMAP,SYSCALL_MUNMAP};
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
@@ -75,6 +74,81 @@ impl TaskManager {
     ///
     /// Generally, the first task in task list is an idle task (we call it zero process later).
     /// But in ch4, we load apps statically, so the first task is a real app.
+ ///添加了记录系统调用的方法
+     pub  fn record_syscall_num(&self,syscall_id:usize) {
+        let mut inner =self.inner.exclusive_access();
+        let current = inner.current_task;
+        let task= &mut inner.tasks[current];
+
+        match syscall_id {
+            SYSCALL_WRITE =>{
+                task.syscall_num.syscall_write = task.syscall_num.syscall_write + 1;
+
+            },
+            SYSCALL_EXIT =>{
+                task.syscall_num.syscall_exit = task.syscall_num.syscall_exit + 1;
+
+            },
+            SYSCALL_GET_TIME =>{
+                task.syscall_num.syscall_gettime = task.syscall_num.syscall_gettime + 1;
+
+            },SYSCALL_TRACE =>{
+                task.syscall_num.syscall_trace = task.syscall_num.syscall_trace + 1;
+
+            },
+            SYSCALL_YIELD =>{
+                task.syscall_num.syscall_yield = task.syscall_num.syscall_yield + 1;
+
+            },
+            SYSCALL_MMAP =>{
+                task.syscall_num.syscall_mmap = task.syscall_num.syscall_yield + 1;
+
+            },
+            SYSCALL_MUNMAP =>{
+                task.syscall_num.syscall_munmap = task.syscall_num.syscall_yield + 1;
+
+            },
+            SYSCALL_SBRK =>{
+                task.syscall_num.syscall_sbrk = task.syscall_num.syscall_yield + 1;
+
+            },
+            _ => (),
+
+        }
+
+    }
+    ///查询当前任务的系统调用次数
+    pub fn get_syscall_num(&self,syscall_id:usize) ->isize{
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let  task =  &inner.tasks[current];
+        match syscall_id {
+            SYSCALL_WRITE =>{
+                return task.syscall_num.syscall_write as isize;
+
+            },
+            SYSCALL_EXIT =>{
+                return task.syscall_num.syscall_exit as isize;
+
+            },
+            SYSCALL_GET_TIME =>{
+                return task.syscall_num.syscall_gettime as isize;
+
+            },SYSCALL_TRACE =>{
+                return task.syscall_num.syscall_trace as isize;
+
+            },
+            SYSCALL_YIELD =>{
+                return task.syscall_num.syscall_yield as isize;
+
+            },
+            _ =>{
+                return 0;
+            }
+
+        }
+    }
+
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];

@@ -28,6 +28,9 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+
+    ///用于存放结构体调用次数
+    pub syscall_num: SysCallNum,
 }
 
 impl TaskControlBlock {
@@ -63,6 +66,7 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            syscall_num: SysCallNum,
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -109,4 +113,17 @@ pub enum TaskStatus {
     Running,
     /// exited
     Exited,
+}
+
+#[derive(Copy, Clone,Default)]
+//这里我就用结构体存放不同编号的系统调用次数了,就是改了一下ch3的
+pub struct  SysCallNum{
+    pub(super)syscall_write: u32,
+    pub(super)syscall_exit: u32,
+    pub(super)syscall_trace: u32,
+    pub(super)syscall_gettime: u32,
+    pub(super)syscall_yield: u32,
+    pub(super)syscall_sbrk: u32,
+    pub(super)syscall_mmap:u32,
+    pub(super)syscall_munmap:u32,
 }
