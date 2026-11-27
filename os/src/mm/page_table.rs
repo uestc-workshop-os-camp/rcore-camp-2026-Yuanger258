@@ -1,6 +1,5 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use crate::mm::page_table;
 
 use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;

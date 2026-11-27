@@ -36,15 +36,15 @@ pub struct TaskManager {
     /// total number of tasks
     num_app: usize,
     /// use inner value to get mutable access
-    inner: UPSafeCell<TaskManagerInner>,
+    pub(crate) inner: UPSafeCell<TaskManagerInner>,
 }
 
 /// The task manager inner in 'UPSafeCell'
-struct TaskManagerInner {
+pub(crate) struct TaskManagerInner {
     /// task list
-    tasks: Vec<TaskControlBlock>,
+    pub(crate) tasks: Vec<TaskControlBlock>,
     /// id of current `Running` task
-    current_task: usize,
+    pub(crate) current_task: usize,
 }
 
 lazy_static! {
@@ -101,15 +101,15 @@ impl TaskManager {
 
             },
             SYSCALL_MMAP =>{
-                task.syscall_num.syscall_mmap = task.syscall_num.syscall_yield + 1;
+                task.syscall_num.syscall_mmap = task.syscall_num.syscall_mmap + 1;
 
             },
             SYSCALL_MUNMAP =>{
-                task.syscall_num.syscall_munmap = task.syscall_num.syscall_yield + 1;
+                task.syscall_num.syscall_munmap = task.syscall_num.syscall_munmap + 1;
 
             },
             SYSCALL_SBRK =>{
-                task.syscall_num.syscall_sbrk = task.syscall_num.syscall_yield + 1;
+                task.syscall_num.syscall_sbrk = task.syscall_num.syscall_sbrk + 1;
 
             },
             _ => (),
@@ -141,6 +141,15 @@ impl TaskManager {
             SYSCALL_YIELD =>{
                 return task.syscall_num.syscall_yield as isize;
 
+            },
+            SYSCALL_MMAP => {
+                return task.syscall_num.syscall_mmap as isize;
+            },
+            SYSCALL_MUNMAP => {
+                return task.syscall_num.syscall_munmap as isize;
+            },
+            SYSCALL_SBRK => {
+                return task.syscall_num.syscall_sbrk as isize;
             },
             _ =>{
                 return 0;

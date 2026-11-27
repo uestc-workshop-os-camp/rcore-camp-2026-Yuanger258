@@ -262,6 +262,23 @@ impl MemorySet {
             false
         }
     }
+    /// remove
+    pub fn remove_area(&mut self,start: VirtAddr,end: VirtAddr) -> bool{
+        let start_vpn = start.floor();
+        let end_vpn = end.ceil();
+
+        let index = match self.areas.iter().position(|area|{
+            area.vpn_range.get_start() == start_vpn && area.vpn_range.get_end() == end_vpn && area.map_type == MapType::Framed
+        }){
+            Some(index) => index,
+            None => return false,
+
+        };
+        let mut area = self.areas.remove(index);
+        area.unmap(&mut self.page_table);
+
+        true
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

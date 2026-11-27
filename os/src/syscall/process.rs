@@ -1,6 +1,8 @@
 //! Process management syscalls
-use crate::{mm::{PTEFlags, translated_byte_buffer,translated_byte_buffer_mut,PageTable,VirtAddr}, task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next}, timer::get_time_us};
+use crate::{config::PAGE_SIZE, mm::{MapPermission, PTEFlags, PageTable, VirtAddr, VirtPageNum, translated_byte_buffer, translated_byte_buffer_mut}, task::{TASK_MANAGER, change_program_brk, exit_current_and_run_next, suspend_current_and_run_next}, timer::get_time_us};
 use crate::task::current_user_token;
+
+
 #[repr(C)]
 #[derive(Debug)]
 pub struct TimeVal {
@@ -67,7 +69,7 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
             }
 
             let ptr = _id as *const u8;
-            let mut buffers = translated_byte_buffer(current_user_token(), ptr, 1);
+            let buffers = translated_byte_buffer(current_user_token(), ptr, 1);
             return buffers[0][0] as isize;
         },
         1 =>{
@@ -80,13 +82,13 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
             }
 
             let  ptr = _id as *mut u8;
-            let buffers = translated_byte_buffer_mut(current_user_token(),ptr,1);
+            let mut buffers = translated_byte_buffer_mut(current_user_token(),ptr,1);
             buffers[0][0] = _data as u8;
             return 0;
 
         },
         2 =>{
-
+            return TASK_MANAGER.get_syscall_num(_id);
         },
         _ =>{
             return -1;
@@ -100,14 +102,101 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    //检查一下port
+    if(_port & !0x7) != 0x0{
+        return -1;
+    }
+    if (_port & 0x7) == 0 {
+        return -1;
+    }
+
+    let mut permission = MapPermission::empty();
+    //然后转换为mappermission
+    if(_port & 0x1) != 0{
+        permission |= MapPermission::R;
+    }
+    if(_port & 0x2) != 0{
+        permission |= MapPermission::W;
+    }
+    if(_port & 0x4) != 0{
+        permission |= MapPermission::X;
+    }
+   permission |= MapPermission::U;
+
+   //检查一下start有没有按页对齐
+    if _start % PAGE_SIZE != 0{
+        return -1;
+    }
+    if _len == 0{
+         return -1;  
+    }
+    //然后确定虚拟页的范围
+   let end = _start + _len;
+   let start_va = VirtAddr::from(_start);
+   let end_va = VirtAddr::from(end);
+   let start_vpn = start_va.floor();
+   let end_vpn = end_va.ceil();
+
+    //本来不应该直接访问TASK_MANAGER.inner的，但是我感觉时间不够交题了，后面再重新写这一块吧
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    let memory_set = &mut inner.tasks[current].memory_set;
+
+   //然后检查[start, start + len) 中是否存在已经被映射的页
+   for vpn_num in start_vpn.0..end_vpn.0{
+        let vpn = VirtPageNum(vpn_num);
+
+        if let Some(pte) = memory_set.translate(vpn){
+            if pte.is_valid(){
+                return -1;
+            }
+        }
+   }
+
+   //然后建立映射
+    memory_set.insert_framed_area(start_va,end_va,permission,);
+    0
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
-}
+
+    if _start % PAGE_SIZE != 0{
+        return -1;
+    }
+    if _len == 0{
+        return -1;
+    }
+
+    let end = _start + _len;
+    let start_va = VirtAddr::from(_start);
+    let end_va = VirtAddr::from(end);
+    let start_vpn = start_va.floor();
+    let end_vpn = end_va.ceil();
+
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    let memory_set = &mut inner.tasks[current].memory_set;
+
+    for vpn_num in start_vpn.0..end_vpn.0{
+        let vpn = VirtPageNum(vpn_num);
+
+        match memory_set.translate(vpn){
+            Some(pte) if pte.is_valid() =>{}
+            _ => return -1,
+        }
+    }
+
+    let success = memory_set.remove_area(start_va, end_va);
+    
+    if success{
+        0
+    }else {
+        -1
+    }
+    }
+
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
     trace!("kernel: sys_sbrk");
@@ -116,4 +205,4 @@ pub fn sys_sbrk(size: i32) -> isize {
     } else {
         -1
     }
-}}
+}
